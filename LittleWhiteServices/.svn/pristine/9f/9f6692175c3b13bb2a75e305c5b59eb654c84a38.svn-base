@@ -1,0 +1,6 @@
+svnlink_sh=svnlink.sh
+xcodebuild_sh=xcodebuild.sh
+projectFolderPath=/Users/YenHenChia/BuildServices
+
+svnUserName=yehengjia
+svnPassword=@Gaga0606

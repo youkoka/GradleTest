@@ -1,0 +1,27 @@
+package com.mitake.build.configure;
+
+import org.springframework.beans.factory.config.PropertyPlaceholderConfigurer;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.core.io.Resource;
+import org.springframework.core.io.support.PathMatchingResourcePatternResolver;
+import org.springframework.core.io.support.ResourcePatternResolver;
+import org.springframework.web.servlet.config.annotation.EnableWebMvc;
+import org.springframework.web.servlet.config.annotation.WebMvcConfigurerAdapter;
+
+@EnableWebMvc
+@Configuration
+public class AppPropertyPlaceholderConfigurer extends WebMvcConfigurerAdapter{
+
+	@Bean
+	PropertyPlaceholderConfigurer propertyPlaceholderConfigurer() {
+		
+		PropertyPlaceholderConfigurer configurer = new PropertyPlaceholderConfigurer();
+		ResourcePatternResolver resolver = new PathMatchingResourcePatternResolver();
+		Resource resource = resolver.getResource("classpath:com/mitake/resources/configure/Configure.properties");
+		configurer.setFileEncoding("utf-8");
+		configurer.setLocation(resource);
+		
+		return configurer;
+	}
+}

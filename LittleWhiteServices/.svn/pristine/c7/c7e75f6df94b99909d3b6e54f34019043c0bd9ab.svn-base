@@ -1,0 +1,8 @@
+svnlink_sh=svnlink.sh
+xcodebuild_sh=xcodebuild.sh
+projectFolderPath=/Users/YenHenChia/BuildServices
+
+jenkinsDataAccessPath=http://10.1.16.141:8080/MitakeServices
+
+svnUserName=yehengjia
+svnPassword=@Gaga0606

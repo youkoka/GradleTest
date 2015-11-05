@@ -1,0 +1,402 @@
+package com.mitake.build.controller;
+
+import java.io.File;
+import java.text.DateFormat;
+import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.Date;
+
+import javax.swing.plaf.metal.MetalIconFactory.FolderIcon16;
+
+import com.fasterxml.jackson.*;
+import com.fasterxml.jackson.databind.ObjectMapper;
+
+import org.apache.http.entity.mime.MultipartEntityBuilder;
+import org.apache.http.entity.mime.content.FileBody;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.stereotype.Controller;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+
+import com.mitake.build.object.BuildJsonObject;
+import com.mitake.build.object.BuildJsonSvn;
+import com.mitake.build.object.StateCode;
+import com.mitake.build.object.Statement;
+import com.mitake.build.service.HttpService;
+
+@Controller
+public class ServiceController extends BaseController{
+
+	private String tomcatSavePath;
+	private String ShellScriptPath;
+	
+	@Value("${svnlink_sh}")
+	private String svnlink_sh;
+	
+	@Value("${xcodebuild_sh}")
+	private String xcodebuild_sh;
+	
+	@Value("${projectFolderPath}")
+	private String projectAbsoluteFolder;
+	
+	@Value("${svnUserName}")
+	private String svnUser;
+	
+	@Value("${svnPassword}")
+	private String svnPassword;
+	
+	@Value("${jenkinsDataAccessPath}")
+	private String jenkinsDataAccessPath;
+	
+	@RequestMapping(value="/buildService")
+	public ResponseEntity<Void> buildService(
+			@RequestParam(value="jsonContent") String jsonContent) {
+		
+		ResponseEntity<Void> response = null;
+		
+        try {
+
+        	tomcatSavePath = (new File(this.getClass().getResource("/").getFile())).getParentFile().getParent();
+        	
+        	ShellScriptPath = tomcatSavePath + File.separatorChar + "WEB-INF" + File.separatorChar + "ShellScript" + File.separatorChar;
+        	
+        	String projectAbsoluteFolderTemp = projectAbsoluteFolder;
+        	
+        	String jsonData = jsonContent;
+        	
+        	ObjectMapper mapper = new ObjectMapper();
+        	
+        	BuildJsonObject buildJsonObj = mapper.readValue(jsonData, BuildJsonObject.class);
+        	
+        	//! ------ arguments start ---------
+        	
+        	//! device 
+        	String device = "";
+        	if(!isStrEmpty(buildJsonObj.getDevice())) {
+        		
+        		device = buildJsonObj.getDevice();
+        	}
+        	
+        	//! projectFolder, projectName, buildDate
+        	String projectFolder = "", projectName = "", buildDate = "";
+        	if(!isStrEmpty(buildJsonObj.getProjectFolder()) && !isStrEmpty(buildJsonObj.getProjectName())) {
+        			
+        		DateFormat dateFormat = new SimpleDateFormat("yyyyMMddHHmmss");
+        		Date date = new Date();
+        		buildDate = dateFormat.format(date);
+        		
+            	projectName = buildJsonObj.getProjectName();
+            	
+            	projectAbsoluteFolderTemp += File.separatorChar + projectName + File.separator + buildDate;
+            	
+        		projectFolder = projectAbsoluteFolderTemp + buildJsonObj.getProjectFolder();
+        	}
+    		
+        	//! projectScheme
+        	String projectScheme = "";
+        	if(!isStrEmpty(buildJsonObj.getProjectScheme())) {
+        		
+        		projectScheme = buildJsonObj.getProjectScheme();
+        	}
+        	
+        	//! projectTarget
+        	String projectTarget = "";
+        	if(!isStrEmpty(buildJsonObj.getProjectTarget())) {
+        		
+        		projectTarget = buildJsonObj.getProjectTarget();
+        	}
+        	
+        	//! projectVersion
+        	String projectVersion = "";
+        	if(!isStrEmpty(buildJsonObj.getProjectVersion())) {
+        		
+        		projectVersion = buildJsonObj.getProjectVersion();
+        	}
+        	
+        	//! desc
+        	String desc = "";
+        	if(!isStrEmpty(buildJsonObj.getDesc())) {
+        		
+        		desc = buildJsonObj.getDesc();
+        	}
+        	
+        	String bundleId = "";
+        	if(!isStrEmpty(buildJsonObj.getBundleID())) {
+        		
+        		bundleId = buildJsonObj.getBundleID();
+        	}
+        	
+        	String bundleName = "";
+        	if(!isStrEmpty(buildJsonObj.getBundleName())) {
+        		
+        		bundleName = buildJsonObj.getBundleName();
+        	}
+        	//! ------ arguments end ---------
+        	
+        	//! ------ svn download start --------
+        	
+        	if(buildJsonObj.getSvn() != null) {
+        		
+	    		for(int i = 0; i < buildJsonObj.getSvn().length; i++) {
+	    			
+	    			BuildJsonSvn buildSvn = buildJsonObj.getSvn()[i];
+	    			
+	    			if(!isStrEmpty(buildSvn.getLink()) && !isStrEmpty(buildSvn.getDest())) {
+	    				
+		    			String svnLink = buildSvn.getLink();
+		    			String svnDest = projectAbsoluteFolderTemp + buildSvn.getDest();
+		    			
+		    			if(!executeSvnlinkScript("checkout", svnLink, svnDest, svnUser, svnPassword)) {
+			        		
+			        		logger.warn("executeSvnlinkScript execute failed!"
+			        				+ " svnLink = " + svnLink
+			        				+ " svnDest = " + svnDest
+			        				+ " svnUser = " + svnUser
+			        				+ " svnPassword = " + svnPassword);
+		            	}
+	    			}
+	    			else {
+	    				
+	    				logger.warn("svn content is empty"
+		        				+ " svnLink = " + buildSvn.getLink()
+		        				+ " svnDest = " + buildSvn.getDest());
+	    			}
+	    		}
+        	}
+    		//! ------ svn download end --------
+    		
+    		//! ------- archive start -------
+    		if(device != null) {
+    			
+    			if(device.equals("I") || device.equals("i")) {
+	        		
+	        		logger.warn("start xcode build!");
+	        		
+	        		if(!isStrEmpty(projectName) && !isStrEmpty(projectFolder) && !isStrEmpty(projectScheme) && !isStrEmpty(projectTarget)) {
+			    		
+	        			//! xcode build
+			        	if(!executeXcodebuildScript(projectFolder, "", "", projectScheme, projectTarget)) {
+			        		
+			        		logger.warn("executeXcodebuildScript failed!"
+			        				+ " projectName = " + projectName
+			        				+ " projectFolder = " + projectFolder
+			        				+ " destIPAFolder = " + ""
+			        				+ " ipaName = " + ""
+			        				+ " projectScheme = " + projectScheme
+			        				+ " projectTarget = " + projectTarget);
+			        	}
+	        		}
+	        		else {
+		        		
+		        		logger.warn("xcode build argument is empty!"
+		        				+ " projectFolder = " + projectFolder
+		        				+ " projectScheme = " + projectScheme
+		        				+ " projectTarget = " + projectTarget);
+	        		}
+    			}
+    			else if(device.equals("G") || device.equals("g")) {
+    				
+    				//! android build
+	        		logger.warn("start android build!");
+    			}
+    			else if(device.equals("W") || device.equals("w")) {
+    				
+    				//! winphone build
+	        		logger.warn("start winphone build!");
+    			}
+    			else {
+	        		
+	        		logger.warn("unknow device build! device is : " + device);
+    			}
+    		}
+
+    		//! ------- archive end -------
+    		
+    		if(device.equals("I") || device.equals("i")) {
+    			String sourcePath = projectFolder + File.separatorChar + "build" + File.separatorChar + "Release-iphoneos";
+    			ArrayList<File> fileList = getFileByExtensionType(sourcePath, ".ipa");
+    			
+    			if(!fileList.isEmpty()) {
+    				
+	    			//! 將檔案轉成binary data 送給資料存取Server
+	    			HttpService httpService = new HttpService();
+	    			
+	    			MultipartEntityBuilder builder = MultipartEntityBuilder.create();
+	    			FileBody fileBody = new FileBody(fileList.get(0));
+	    			
+	    			if(fileBody != null) {
+	    			
+	    				builder.addPart("file", fileBody);
+	    			}
+	    			
+	    			builder.addTextBody("projectName", projectName);
+	    			
+	    			builder.addTextBody("archiveName", fileList.get(0).getName());
+	    				
+	    			builder.addTextBody("version", projectVersion);
+	    			
+	    			builder.addTextBody("device", device);
+	    				
+	    			builder.addTextBody("date", buildDate);
+	    			
+	    			builder.addTextBody("desc", desc);
+	    			
+	    			builder.addTextBody("bundleID", bundleId);
+	    				
+	    			builder.addTextBody("bundleName", bundleName);
+	    			
+	    			logger.warn("do webService + " + jenkinsDataAccessPath + File.separatorChar +"uploadData.do");
+	    			
+	    			int statusCode = httpService.send(jenkinsDataAccessPath + File.separatorChar +"uploadData.do", builder.build());
+	    			
+	    			logger.warn("httpService send status : " + statusCode);
+    			}
+    			else {
+    				
+    				logger.warn("archive file is empty!");
+    			}
+    		}
+    		
+            response = new ResponseEntity<Void>(HttpStatus.OK);
+
+        } catch (Exception e) {
+
+            e.printStackTrace();
+        }
+
+        return response;
+	}
+	
+	/*
+	argument
+	1.<cmd, ex:ls, update, checkout> 2.<svn link> 3.<username> 4.<password>
+	or
+	1.<cmd, ex:ls, update, checkout> 2.<svn link> 3.<dest path> 4.<username> 5.<password>
+	*/
+	private boolean executeSvnlinkScript(String cmd, String svnLink,  String destPath, String username, String password) {
+		
+		boolean reVal = true;
+		
+		//! svn
+    	
+    	String svnlinkShPath = ShellScriptPath + svnlink_sh;
+    	
+		File svnlinkShFile = new File(svnlinkShPath);
+		
+		if(svnlinkShFile.exists()) {
+    		
+			svnlinkShFile.setExecutable(true);
+			
+			Statement stat1 = new Statement();
+	    	stat1.cmdLine = new String[]{svnlinkShPath, cmd, svnLink, destPath, username, password};
+	    	
+	    	ArrayList<Statement> stAry = new ArrayList<Statement>();
+	    	stAry.add(stat1);
+	
+	    	for (Statement statement : stAry) {
+				
+	    		StateCode code = statement.onStart();
+	    		
+	    		if(code == StateCode.TriggerSuccess) {
+	            	
+	        		System.out.println("success");
+	        	}
+	        	else {
+	        		
+	        		reVal = false;
+	        		System.out.println(statement.getErrorMsg());
+	        		break;
+	        	}
+			}
+    	}
+		else {
+			
+			reVal = false;
+    		logger.warn(svnlinkShPath + "not exist!");
+		}
+		return reVal;
+	}
+	/*
+	argument
+	1. xcode project path
+	2. ipa output folder
+	3. ipa name
+	*/
+	private boolean executeXcodebuildScript(
+			String projectPath,
+			String destIPAFolder,
+			String ipaName,
+			String scheme,
+			String target) {
+	
+		boolean reVal = true;
+    	
+    	String xcodebuildShPath = ShellScriptPath +  xcodebuild_sh;
+    	
+		File xcodebuildShFile = new File(xcodebuildShPath);
+    	
+    	if(xcodebuildShFile.exists()) {
+    		
+    		xcodebuildShFile.setExecutable(true);
+	    	
+	    	Statement stat1 = new Statement();
+	    	stat1.cmdLine = new String[]{xcodebuildShPath, projectPath, destIPAFolder, ipaName, scheme, target};
+	    	
+	    	ArrayList<Statement> stAry = new ArrayList<Statement>();
+	    	stAry.add(stat1);
+	
+	    	for (Statement statement : stAry) {
+				
+	    		StateCode code = statement.onStart();
+	    		
+	    		if(code == StateCode.TriggerSuccess) {
+	            	
+	        		System.out.println("success");
+	        	}
+	        	else {
+	        		
+	        		reVal = false;
+	        		logger.warn("statement : " + statement.getErrorMsg());
+	        		break;
+	        	}
+			}
+    	}
+    	else {
+    		
+    		reVal = false;
+    		logger.warn(xcodebuildShPath + "not exist!");
+    	}
+    	
+		return reVal;
+	}
+	
+	private ArrayList<File> getFileByExtensionType(String sourcePath, String extType) {
+		
+		ArrayList<File> fileList = new ArrayList<File>();
+		
+		final String path = sourcePath;
+		
+		File fileFolder = new File(path);
+		
+		String fileListTemp[] = fileFolder.list();
+		
+		for(String f : fileListTemp) {
+			
+			File fileTemp = new File(path + File.separatorChar + f);
+			
+			if(fileTemp.isFile()) {
+				
+				System.out.println(fileTemp + " is file");
+				
+				if(f.endsWith(extType)) {
+				
+					fileList.add(fileTemp);
+				}
+			}
+		}
+		
+		return fileList;
+	}
+}

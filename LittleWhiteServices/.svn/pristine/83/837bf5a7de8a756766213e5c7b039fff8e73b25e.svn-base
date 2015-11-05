@@ -1,0 +1,39 @@
+#!/bin/sh
+
+#xcodebuild.sh
+#
+#
+# argument
+# 1. xcode project path
+# 2. ipa output folder
+# 3. ipa name
+# 4. scheme
+# 5. target
+
+#!/bin/bash
+
+if [ $# != 5 ]; then
+	echo "usage : xcodebuild <source path> <ipa output path> <ipa name> <project scheme> <project target>"
+	exit
+fi
+
+configure_build_dir="build/Release-iphoneos"
+source_path=$1
+ipa_output_path=$2
+ipa_name=$3
+project_scheme=$4
+project_target=$5
+
+cd $source_path
+
+/usr/bin/xcodebuild clean
+
+/usr/bin/xcodebuild -scheme $project_scheme -target $project_target -configuration Release CONFIGURATION_BUILD_DIR=$configure_build_dir
+
+echo "app folder : "$source_path/$configure_build_dir
+
+applist=$(ls $source_path/$configure_build_dir | grep "app$")
+for appname in $applist
+do
+	/usr/bin/xcrun -sdk iphoneos PackageApplication -v $source_path/build/Release-iphoneos/$appname
+done

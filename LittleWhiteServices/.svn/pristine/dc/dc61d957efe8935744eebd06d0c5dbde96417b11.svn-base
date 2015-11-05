@@ -1,0 +1,21 @@
+package com.mitake.build.object;
+
+public class UtilityObject {
+
+	static public boolean isStrEmpty(String str) {
+		
+		if(str == null) {
+			
+			return true;
+		}
+			
+		str = str.trim();
+		
+		if(str.length() > 0) {
+		
+			return false;
+		}
+		
+		return true;
+	}
+}

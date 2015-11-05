@@ -1,0 +1,15 @@
+# Svn shell script(located on webapp/WEB-INF/ShellScript/)
+svnlink_sh=svnlink.sh
+
+# Xcode build shell script(located on webapp/WEB-INF/ShellScript/)
+xcodebuild_sh=xcodebuild.sh
+
+# Project saved folder 
+projectFolderPath=/Users/YenHenChia/BuildServices
+
+# Mitake Services url
+jenkinsDataAccessPath=http://services.mitake.com.tw/MitakeServices
+
+# Svn account
+svnUserName=yehengjia
+svnPassword=@Gaga0606
